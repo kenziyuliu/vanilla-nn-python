@@ -10,13 +10,13 @@ def xavier_normal_init(shape):
 
 
 def he_uniform_init(shape, a=0):
-    input_dim = shape[1]
+    input_dim = shape[0]
     bound = np.sqrt(6. / ((1. + np.square(a)) * input_dim))
     return np.random.uniform(-bound, bound, size=shape)
 
 
 def he_normal_init(shape, a=0):
-    input_dim = shape[1]
+    input_dim = shape[0]
     return np.random.normal(0, np.sqrt(2. / (1. + np.square(a)) * input_dim), size=shape)
 
 
