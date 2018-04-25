@@ -24,6 +24,10 @@ def cross_entropy_loss(y_pred, y_true):
     return -np.log(y_pred[np.argmax(y_true)])   # -negative log probability of the right class
 
 
+def get_accuracy(y_true, y_pred):
+    return np.mean(np.equal(np.argmax(y_true, axis=-1), np.argmax(y_pred, axis=-1)))
+
+
 if __name__ == '__main__':
     """
     Test cases
@@ -44,4 +48,3 @@ if __name__ == '__main__':
     y_true = np.array([0,0,1,0,0])
     print('y_pred: {}, y_true: {}'.format(y_pred, y_true))
     print('loss: {}'.format(cross_entropy_loss(y_pred, y_true)))
-
