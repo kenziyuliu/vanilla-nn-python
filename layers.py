@@ -114,9 +114,9 @@ class Dropout:
 
     def backward(self, backproped_grad):
         deriv = backproped_grad * self.mask / self.rate # / rate so no change for prediction
-        
 
-def get_accuracy(y_true, y_pred):
+
+def get_accuracy(y_pred, y_true):
     return np.mean(np.equal(np.argmax(y_true, axis=-1), np.argmax(y_pred, axis=-1)))
 
 
