@@ -6,6 +6,7 @@ from layers import *
 
 INPUT_DIM = 128
 NUM_CLASSES = 10
+EPSILON = 1e-12
 
 # Example usage
 sample_model = [
@@ -33,4 +34,3 @@ gradient = lossfunction.backward()
 
 for layer in reversed(sample_model):
     gradient = layer.backward(gradient)
-

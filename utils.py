@@ -1,5 +1,5 @@
 import numpy as np
-import config
+# import config
 
 
 def shuffle_together(a, b):
@@ -41,6 +41,10 @@ def whitening(data):
     return data
 
 
+def get_accuracy(y_pred, y_true):
+    return np.mean(np.equal(np.argmax(y_true, axis=-1), np.argmax(y_pred, axis=-1)))
+
+
 if __name__ == '__main__':
     """
     Test cases
@@ -60,4 +64,3 @@ if __name__ == '__main__':
     data = np.random.randint(0,10, (3,3))
     print(data)
     print(whitening(data))
-
