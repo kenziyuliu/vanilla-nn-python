@@ -6,7 +6,7 @@ def get_optimizer(name):
     name = name.lower()
     if name == 'sgd':
         return SGD(config.LEARNING_RATE)
-    elif name.lower() == 'adam':
+    elif name == 'adam':
         return Adam(config.LEARNING_RATE)
     else:
         raise ValueError('Unsupported Optimizer: "{}"'.format(name))
