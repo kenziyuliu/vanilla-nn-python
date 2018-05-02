@@ -8,10 +8,10 @@ NUM_CLASSES = 10
 EPSILON = 1e-12
 
 ''' Training '''
-LEARNING_RATE = 0.001
+LEARNING_RATE = 0.01
 OPT='sgd'
-NUM_EPOCHS = 1
-BATCH_SIZE = 64
+NUM_EPOCHS = 300
+BATCH_SIZE = 32
 
 # from layers import *
 #

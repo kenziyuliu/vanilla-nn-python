@@ -244,11 +244,15 @@ class CrossEntropyLoss:
         self.y_pred = y_pred
         self.y_true = y_true
         # -negative log probability of the right class for each example in the batch
+        # print('ypred:', y_pred)
+        # print('ypred shape:', y_pred.shape)
+        # print('ytrue:', y_true)
+        # print('ytrue shape:', y_true.shape)
         right_class_probs = y_pred[np.arange(len(y_pred)), np.argmax(y_true, axis=1)]
-        return -np.log(right_class_probs)
+        return -np.log(right_class_probs + config.EPSILON)
 
     def backward(self):
-        return -self.y_true / self.y_pred
+        return -self.y_true / (self.y_pred + config.EPSILON)
 
 
 
@@ -292,10 +296,3 @@ if __name__ == '__main__':
     x = np.arange(30).reshape(5, 6)
     print(x)
     print(Dropout(0.5).forward(x))
-
-
-
-
-
-
-

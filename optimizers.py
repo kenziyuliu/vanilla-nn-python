@@ -68,4 +68,3 @@ class Adam:
             mt_hat = self.mt[i] / (1 - self.B1 ** self.t)
             vt_hat = self.vt[i] / (1 - self.B2 ** self.t)
             parameter -= self.learning_rate * mt_hat / (np.sqrt(vt_hat) + self.epsilon)
-
