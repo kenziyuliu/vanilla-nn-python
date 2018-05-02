@@ -1,6 +1,5 @@
 import numpy as np
 from initializers import *
-from utils import *
 import config
 from optimizers import get_optimizer
 import copy
@@ -46,7 +45,6 @@ class FullyConnected:
 
         if use_bias:
             self.shape_list.append(self.b.shape)
-
         # Init optimizers using shape of used parameters; e.g. velocity
         self.optimizer.init_shape(self.shape_list)
 
@@ -57,10 +55,11 @@ class FullyConnected:
         else:
             return self.W
 
-    def forward(self, input):
+    def forward(self, input, training=None):
         '''
         Compute forward pass and save input
         input.shape = (batch x self.input_dim), output.shape = (batch x self.output_dim)
+        `training` parameter is ignored for conforming with interface
         '''
         self.input = input
         w = self.get_weight()
@@ -99,11 +98,12 @@ class FullyConnected:
         self.optimizer.optimize(params_gradient)
 
 
+
 class ReLU:
     def __init__(self):
         self.input = None
 
-    def forward(self, input):
+    def forward(self, input, training=None):
         ''' input.shape = output.shape = (batch x input_dims) '''
         self.input = input
         return np.maximum(input, 0)
@@ -113,7 +113,8 @@ class ReLU:
         return backproped_grad * deriv
 
     def update(self):
-        pass
+        pass    # Nothing to update
+
 
 
 class LeakyReLU:
@@ -123,7 +124,7 @@ class LeakyReLU:
         self.alpha = alpha
         self.input = None
 
-    def forward(self, input):
+    def forward(self, input, training=None):
         ''' input.shape = output.shape = (batch x input_dims) '''
         self.input = input
         return np.maximum(input, self.alpha * input)
@@ -133,17 +134,20 @@ class LeakyReLU:
         return backproped_grad * deriv
 
     def update(self):
-        pass
+        pass    # Nothing to update
+
+
 
 class Softmax:
     def __init__(self):
         self.output = None
 
-    def forward(self, input):
+    def forward(self, input, training=None):
         '''
         Numerically more stable implementation of
         softmax function. Ref: http://cs231n.github.io/linear-classify/
         input.shape = output.shape = (batch x input_dims)
+        `training` parameter is ignored to conform with interface
         '''
         # maximum value is now 0 along each training example, so exponentials wont break
         input -= np.max(input, axis=1, keepdims=True)
@@ -156,7 +160,78 @@ class Softmax:
         return backproped_grad * deriv
 
     def update(self):
-        pass
+        pass    # Nothing to update
+
+
+
+class Dropout:
+    def __init__(self, rate):
+        if rate < 0 or rate >= 1:
+            raise ValueError('Dropout: dropout rate must be >= 0 and < 1')
+        self.rate = rate
+        self.mask = None
+        self.input = None
+
+    def forward(self, input, training):
+        ''' input.shape = output.shape = (batch x input_dims) '''
+        if not training:
+            return input    # During test time, no dropout required
+
+        self.mask = np.random.binomial(1, self.rate, input.shape) / self.rate   # divide rate so no change for prediction
+        self.input = input
+        return input * self.mask
+
+    def backward(self, backproped_grad):
+        ''' backproped_grad.shape = (batch x input_dims) '''
+        deriv = backproped_grad * self.mask / self.rate # divide rate so no change for prediction
+
+    def update(self):
+        pass    # Nothing to update
+
+
+
+class BatchNorm:
+    def __init__(self, input_dim, avg_decay=0.9, epsilon=1e-3, opt=config.OPT):
+        self.gamma = np.ones(input_dim[1])
+        self.beta = np.zeros(input_dim[1])
+        self.d_gamma = None
+        self.d_beta = None
+        self.running_avg_mean = np.zeros(input_dim[1])
+        self.running_avg_std = np.zeros(input_dim[1])
+        self.avg_decay =  avg_decay
+        self.epsilon = epsilon
+        self.input_hat = None
+        self.input_dim = input_dim
+        self.std = None
+        self.optimizer = get_optimizer(opt)
+
+        shape_list = [self.gamma.shape, self.beta.shape]
+        self.optimizer.init_shape(shape_list)
+
+
+    def forward(self, input, training):
+        if training:
+            self.std = np.sqrt(np.var(input, axis=0) + self.epsilon)
+            mean = np.mean(input, axis=0)
+            self.input_hat = (input - mean) / self.std
+            self.running_avg_mean = self.avg_decay * self.running_avg_mean + (1 - self.avg_decay) * mean
+            self.running_avg_std = self.avg_decay * self.running_avg_std + (1 - self.avg_decay) * self.std
+            return self.gamma * self.input_hat + self.beta
+        else:
+            input_hat = (input - self.running_avg_mean) / self.running_avg_std
+            return self.gamma * input_hat + self.beta
+
+    def backward(self, backproped_grad):
+        d_xhat = backproped_grad * self.gamma
+        dx = (1. / self.input_dim[0]) * (self.input_dim[0] * d_xhat - np.sum(d_xhat, axis=0)) / self.std - self.input_hat * np.sum(d_xhat * self.input_hat, axis=0)
+        self.d_gamma = np.sum(backproped_grad * self.input_hat, axis=0)
+        self.d_beta = np.sum(backproped_grad, axis=0)
+        return dx
+
+    def update(self):
+        params_gradient = [(self.gamma, self.d_gamma), (self.beta, self.d_beta)]
+        self.optimizer.optimize(params_gradient)
+
 
 
 class CrossEntropyLoss:
@@ -174,71 +249,6 @@ class CrossEntropyLoss:
 
     def backward(self):
         return -self.y_true / self.y_pred
-
-
-
-class Dropout:
-    def __init__(self, rate):
-        if rate < 0 or rate >= 1:
-            raise ValueError('Dropout: dropout rate must be >= 0 and < 1')
-        self.rate = rate
-        self.mask = None
-        self.input = None
-
-    def forward(self, input):
-        ''' input.shape = output.shape = (batch x input_dims) '''
-        self.mask = np.random.binomial(1, self.rate, input.shape) / self.rate   # divide rate so no change for prediction
-        self.input = input
-        return input * self.mask
-
-    def backward(self, backproped_grad):
-        ''' backproped_grad.shape = (batch x input_dims) '''
-        deriv = backproped_grad * self.mask / self.rate # divide rate so no change for prediction
-
-    def update(self):
-        pass
-
-class BatchNorm:
-    def __init__(self, input_dim, momentum = 0.9, epsilon = 1e-3, optimizer_type=config.OPT):
-        self.gamma = np.ones(input_dim[1])
-        self.beta = np.zeros(input_dim[1])
-        self.running_avg_mean = np.zeros(input_dim[1])
-        self.running_avg_std = np.zeros(input_dim[1])
-        self.momentum =  momentum
-        self.epsilon = epsilon
-        self.input_hat = None
-        self.d_gamma = None
-        self.d_beta = None
-        self.input_dim = input_dim
-        self.std = None
-        self.optimizer = get_optimizer(optimizer_type)
-
-        shape_list = [self.gamma.shape, self.beta.shape]
-        self.optimizer.init_shape(shape_list)
-
-
-    def forward(self, input, training=True):
-        if training:
-            self.std = np.sqrt(np.var(input, axis=0) + self.epsilon)
-            mean = np.mean(input, axis=0)
-            self.input_hat = (input - mean) / self.std
-            self.running_avg_mean = self.momentum * self.running_avg_mean + (1 - self.momentum) * mean
-            self.running_avg_std = self.momentum * self.running_avg_std + (1 - self.momentum) * self.std
-            return self.gamma * self.input_hat + self.beta
-        else:
-            input_hat = (input - self.running_avg_mean) / self.running_avg_std
-            return self.gamma * input_hat + self.beta
-
-    def backward(self, backproped_grad):
-        d_xhat = backproped_grad * self.gamma
-        dx = (1. / self.input_dim[0]) * (self.input_dim[0] * d_xhat - np.sum(d_xhat, axis=0)) / self.std - self.input_hat * np.sum(d_xhat * self.input_hat, axis=0)
-        self.d_gamma = np.sum(backproped_grad * self.input_hat, axis=0)
-        self.d_beta = np.sum(backproped_grad, axis=0)
-        return dx
-
-    def update(self):
-        params_gradient = [(self.gamma, self.d_gamma), (self.beta, self.d_beta)]
-        self.optimizer.optimize(params_gradient)
 
 
 

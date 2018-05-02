@@ -13,7 +13,6 @@ def get_optimizer(name):
 
 
 class SGD:
-    """docstring for ClassName"""
     def __init__(self, learning_rate=0.001, momentum=0.9, nesterov=True):
         self.learning_rate = learning_rate
         self.v = []
@@ -69,3 +68,4 @@ class Adam:
             mt_hat = self.mt[i] / (1 - self.B1 ** self.t)
             vt_hat = self.vt[i] / (1 - self.B2 ** self.t)
             parameter -= self.learning_rate * mt_hat / (np.sqrt(vt_hat) + self.epsilon)
+
