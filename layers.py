@@ -2,39 +2,56 @@ import numpy as np
 from initializers import *
 from utils import *
 import config
+from optimizers import get_optimizer
 
 """
 TODO layers:
     BatchNorm
-    WeightNorm
-
 NOTE:
     Only use dropout in training
 """
 
 class FullyConnected:
-    def __init__(self, input_dim, output_dim, weight_initializer, use_bias=False, use_weight_norm=False):
+    def __init__(self,
+                 input_dim,
+                 output_dim,
+                 weight_initializer,
+                 use_bias=False,
+                 use_weight_norm=False,
+                 optimizer=get_optimizer(config.OPT)):
+
+        self.b = np.zeros(output_dim)
+        self.db = None
+        self.optimizer = optimizer
+        self.input = None
+        self.use_bias = use_bias
+        self.use_weight_norm = use_weight_norm
+
+        shape_list = []             # For initializing optimizer
+        self.params_gradient = []   # List of tuples (weights, gradients) for all sets of weights
+
         if use_weight_norm:
-            # weight vector: length output_dim, there are input_dim number of it
+            # weight vector W: length output_dim, there are input_dim number of it
             self.v_shape = (input_dim, output_dim)
             self.g_shape = (output_dim,)
-
             self.v = weight_initializer(self.v_shape)
             self.g = np.linalg.norm(self.v, axis=0)
-
             self.dv = None
             self.dg = None
-
+            shape_list += [self.v_shape, self.g_shape]
+            self.params_gradient += [(self.v, self.dv), (self.g, self.dg)]
         else:
             self.W_shape = (input_dim, output_dim)
             self.W = weight_initializer(self.W_shape)
             self.dW = None
+            shape_list.append(W_shape)
+            self.params_gradient.append((self.W, self.dW))
 
-        self.input = None
-        self.b = np.zeros(output_dim)
-        self.db = None
-        self.use_bias = use_bias
-        self.use_weight_norm = use_weight_norm
+        if use_bias:
+            shape_list.append(self.b.shape)
+            self.params_gradient.append((self.b, self.db))
+        # Init optimizers using shape of used parameters; e.g. velocity
+        self.optimizer.init_shape(shape_list)
 
     def get_weight(self):
         if self.use_weight_norm:
@@ -60,7 +77,7 @@ class FullyConnected:
         '''
         dweights = np.matmul(self.input.T, backproped_grad)                 # shape = (input_dim, output_dim)
         if self.use_weight_norm:
-            v_norm = np.maximum(np.linalg.norm(v, axis=0), config.EPSILON)  # Clip for numerical stability
+            v_norm = np.maximum(np.linalg.norm(self.v, axis=0), config.EPSILON)  # Clip for numerical stability
             self.dg = np.sum(dweights * self.v / v_norm, axis=0)            # Sum gradient since g was broadcasted
             self.dv = (self.g / v_norm * dweights) - (self.g * self.dg / np.square(v_norm) * self.v)
         else:
@@ -73,9 +90,10 @@ class FullyConnected:
         dinput = np.matmul(backproped_grad, self.get_weight().T)            # shape = (batch, input_dim)
         return dinput
 
-    # NOTE: needs change
-    def update(self, change):
-        self.W += change
+    def update(self):
+        ''' Update the weights using the optimizer '''
+        self.optimizer.optimize(self.params_gradient)
+
 
 
 class ReLU:
@@ -90,6 +108,7 @@ class ReLU:
     def backward(self, backproped_grad):
         deriv = np.where(self.input < 0, 0, 1)
         return backproped_grad * deriv
+
 
 
 class LeakyReLU:
@@ -107,6 +126,7 @@ class LeakyReLU:
     def backward(self, backproped_grad):
         deriv = np.where(self.input < 0, self.alpha, 1)
         return backproped_grad * deriv
+
 
 
 class Softmax:
@@ -130,6 +150,7 @@ class Softmax:
         return backproped_grad * deriv
 
 
+
 class CrossEntropyLoss:
     def __init__(self):
         self.y_pred = None   # Usually output from softmax layer
@@ -145,6 +166,7 @@ class CrossEntropyLoss:
 
     def backward(self):
         return -self.y_true / self.y_pred
+
 
 
 class Dropout:
@@ -166,6 +188,7 @@ class Dropout:
         deriv = backproped_grad * self.mask / self.rate # divide rate so no change for prediction
 
 
+
 if __name__ == '__main__':
     """
     Test cases
@@ -177,7 +200,7 @@ if __name__ == '__main__':
     grad_val = np.random.randn(1,3)
     print('grad_val:\n',grad_val)
 
-    FC = FullyConnected(2,3,xavier_normal_init,use_weight_norm=True)
+    FC = FullyConnected(2,3,xavier_normal_init, use_weight_norm=True)
     FC_weight = FC.get_weight()
     # FC_weight = FC.W
     print('FC_weight:\n', FC_weight)
