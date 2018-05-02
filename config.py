@@ -9,8 +9,9 @@ EPSILON = 1e-12
 
 ''' Training '''
 LEARNING_RATE = 0.001
-OPT='adam'
-
+OPT='sgd'
+NUM_EPOCHS = 1
+BATCH_SIZE = 64
 
 # from layers import *
 #

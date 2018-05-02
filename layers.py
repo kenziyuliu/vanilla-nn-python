@@ -3,6 +3,7 @@ from initializers import *
 from utils import *
 import config
 from optimizers import get_optimizer
+import copy
 
 """
 NOTE:
@@ -16,17 +17,17 @@ class FullyConnected:
                  weight_initializer,
                  use_bias=False,
                  use_weight_norm=False,
-                 optimizer=get_optimizer(config.OPT)):
+                 opt=config.OPT):
 
+        self.input = None
         self.b = np.zeros(output_dim)
         self.db = None
-        self.optimizer = optimizer
-        self.input = None
+
         self.use_bias = use_bias
         self.use_weight_norm = use_weight_norm
 
-        shape_list = []             # For initializing optimizer
-        self.params_gradient = []   # List of tuples (weights, gradients) for all sets of weights
+        self.optimizer = get_optimizer(opt)
+        self.shape_list = []             # For initializing optimizer
 
         if use_weight_norm:
             # weight vector W: length output_dim, there are input_dim number of it
@@ -36,20 +37,18 @@ class FullyConnected:
             self.g = np.linalg.norm(self.v, axis=0)
             self.dv = None
             self.dg = None
-            shape_list += [self.v_shape, self.g_shape]
-            self.params_gradient += [(self.v, self.dv), (self.g, self.dg)]
+            self.shape_list += [self.v_shape, self.g_shape]
         else:
             self.W_shape = (input_dim, output_dim)
             self.W = weight_initializer(self.W_shape)
             self.dW = None
-            shape_list.append(W_shape)
-            self.params_gradient.append((self.W, self.dW))
+            self.shape_list.append(self.W_shape)
 
         if use_bias:
-            shape_list.append(self.b.shape)
-            self.params_gradient.append((self.b, self.db))
+            self.shape_list.append(self.b.shape)
+
         # Init optimizers using shape of used parameters; e.g. velocity
-        self.optimizer.init_shape(shape_list)
+        self.optimizer.init_shape(self.shape_list)
 
     def get_weight(self):
         if self.use_weight_norm:
@@ -73,25 +72,31 @@ class FullyConnected:
         This function saves dW and returns d(Loss)/d(input)
         backproped_grad.shape = (batch x self.output_dim), output.shape = (batch x self.input_dim)
         '''
-        dweights = np.matmul(self.input.T, backproped_grad)                 # shape = (input_dim, output_dim)
+        dweights = np.matmul(self.input.T, backproped_grad)           # shape = (input_dim, output_dim)
         if self.use_weight_norm:
             v_norm = np.maximum(np.linalg.norm(self.v, axis=0), config.EPSILON)  # Clip for numerical stability
-            self.dg = np.sum(dweights * self.v / v_norm, axis=0)            # Sum gradient since g was broadcasted
+            self.dg = np.sum(dweights * self.v / v_norm, axis=0)      # Sum gradient since g was broadcasted
             self.dv = (self.g / v_norm * dweights) - (self.g * self.dg / np.square(v_norm) * self.v)
         else:
             self.dW = dweights
 
         if self.use_bias:
-            # Sum gradient since bias was broadcasted
-            self.db = np.sum(backproped_grad, axis=0)
+            self.db = np.sum(backproped_grad, axis=0)                 # Sum gradient since bias was broadcasted
 
-        dinput = np.matmul(backproped_grad, self.get_weight().T)            # shape = (batch, input_dim)
+        dinput = np.matmul(backproped_grad, self.get_weight().T)      # shape = (batch, input_dim)
         return dinput
 
     def update(self):
-        ''' Update the weights using the optimizer '''
-        self.optimizer.optimize(self.params_gradient)
+        ''' Update the weights using the optimizer using the latest weights/gradients '''
+        params_gradient = []
+        if self.use_weight_norm:
+            params_gradient.extend([(self.v, self.dv), (self.g, self.dg)])
+        else:
+            params_gradient.append((self.W, self.dW))
+        if self.use_bias:
+            params_gradient.append((self.b, self.db))
 
+        self.optimizer.optimize(params_gradient)
 
 
 class ReLU:
@@ -107,6 +112,8 @@ class ReLU:
         deriv = np.where(self.input < 0, 0, 1)
         return backproped_grad * deriv
 
+    def update(self):
+        pass
 
 
 class LeakyReLU:
@@ -125,7 +132,8 @@ class LeakyReLU:
         deriv = np.where(self.input < 0, self.alpha, 1)
         return backproped_grad * deriv
 
-
+    def update(self):
+        pass
 
 class Softmax:
     def __init__(self):
@@ -147,6 +155,8 @@ class Softmax:
         deriv = self.output - np.square(self.output)
         return backproped_grad * deriv
 
+    def update(self):
+        pass
 
 
 class CrossEntropyLoss:
@@ -185,6 +195,8 @@ class Dropout:
         ''' backproped_grad.shape = (batch x input_dims) '''
         deriv = backproped_grad * self.mask / self.rate # divide rate so no change for prediction
 
+    def update(self):
+        pass
 
 class BatchNorm:
     def __init__(self, input_dim, momentum = 0.9, epsilon = 1e-3, optimizer_type=config.OPT):

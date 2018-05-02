@@ -1,5 +1,5 @@
 import numpy as np
-# import config
+import config
 
 
 def shuffle_together(a, b):
