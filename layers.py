@@ -1,12 +1,12 @@
 import numpy as np
-from initializers import *
 import config
 from optimizers import get_optimizer
 import copy
 
+
 """
 NOTE:
-    Only use dropout in training
+    - Only use dropout during training
 """
 
 class FullyConnected:
@@ -16,17 +16,19 @@ class FullyConnected:
                  weight_initializer,
                  use_bias=False,
                  use_weight_norm=False,
-                 opt=config.OPT):
-
-        self.input = None
-        self.b = np.zeros(output_dim)
-        self.db = None
+                 opt=config.OPT,
+                 clip_gradients=False):
 
         self.use_bias = use_bias
         self.use_weight_norm = use_weight_norm
+        self.clip_gradients = clip_gradients
 
         self.optimizer = get_optimizer(opt)
-        self.shape_list = []             # For initializing optimizer
+        self.shape_list = []       # For initializing the optimizer
+
+        self.input = None
+        self.b = np.zeros(output_dim, dtype='float64')
+        self.db = None
 
         if use_weight_norm:
             # weight vector W: length output_dim, there are input_dim number of it
@@ -62,19 +64,20 @@ class FullyConnected:
         `training` parameter is ignored for conforming with interface
         '''
         self.input = input
-        w = self.get_weight()
-        return np.matmul(input, w) + (self.b if self.use_bias else 0)
+        return (self.input @ self.get_weight()) + (self.b if self.use_bias else 0)
 
     def backward(self, backproped_grad):
         '''
-        Use back-propagated gradient to compute this layer's gradient
+        Use back-propagated gradient (n x out_dim) to compute this layer's gradient
         This function saves dW and returns d(Loss)/d(input)
         backproped_grad.shape = (batch x self.output_dim), output.shape = (batch x self.input_dim)
         '''
-        dweights = np.matmul(self.input.T, backproped_grad)           # shape = (input_dim, output_dim)
+        assert backproped_grad.shape == (self.input.shape[0], self.get_weight().shape[1])
+        dweights = self.input.T @ backproped_grad       # shape = (input_dim, output_dim)
+
         if self.use_weight_norm:
             v_norm = np.maximum(np.linalg.norm(self.v, axis=0), config.EPSILON)  # Clip for numerical stability
-            self.dg = np.sum(dweights * self.v / v_norm, axis=0)      # Sum gradient since g was broadcasted
+            self.dg = np.sum(dweights * self.v / v_norm, axis=0)      # Use sum since g was broadcasted
             self.dv = (self.g / v_norm * dweights) - (self.g * self.dg / np.square(v_norm) * self.v)
         else:
             self.dW = dweights
@@ -82,20 +85,34 @@ class FullyConnected:
         if self.use_bias:
             self.db = np.sum(backproped_grad, axis=0)                 # Sum gradient since bias was broadcasted
 
-        dinput = np.matmul(backproped_grad, self.get_weight().T)      # shape = (batch, input_dim)
+        dinput = backproped_grad @ self.get_weight().T           # shape = (batch, input_dim)
         return dinput
 
     def update(self):
         ''' Update the weights using the optimizer using the latest weights/gradients '''
         params_gradient = []
+
         if self.use_weight_norm:
+            if self.clip_gradients:
+                self.dv = self.clip_grad(self.dv)
+                self.dg = self.clip_grad(self.dg)
             params_gradient.extend([(self.v, self.dv), (self.g, self.dg)])
         else:
+            if self.clip_gradients:
+                self.dW = self.clip_grad(self.dW)
             params_gradient.append((self.W, self.dW))
+
         if self.use_bias:
+            if self.clip_gradients:
+                self.db = self.clip_grad(self.db)
             params_gradient.append((self.b, self.db))
 
+        # Let the optimizer to do optimization
         self.optimizer.optimize(params_gradient)
+
+    def clip_grad(self, gradient):
+        ''' Clip gradients between -1 and 1 to prevent explosion '''
+        return np.maximum(-1., np.minimum(1., gradient))
 
 
 
@@ -105,8 +122,8 @@ class ReLU:
 
     def forward(self, input, training=None):
         ''' input.shape = output.shape = (batch x input_dims) '''
-        self.input = input
-        return np.maximum(input, 0)
+        self.input = np.copy(input)
+        return np.maximum(self.input, 0)
 
     def backward(self, backproped_grad):
         deriv = np.where(self.input < 0, 0, 1)
@@ -126,37 +143,11 @@ class LeakyReLU:
 
     def forward(self, input, training=None):
         ''' input.shape = output.shape = (batch x input_dims) '''
-        self.input = input
+        self.input = np.copy(input)
         return np.maximum(input, self.alpha * input)
 
     def backward(self, backproped_grad):
         deriv = np.where(self.input < 0, self.alpha, 1)
-        return backproped_grad * deriv
-
-    def update(self):
-        pass    # Nothing to update
-
-
-
-class Softmax:
-    def __init__(self):
-        self.output = None
-
-    def forward(self, input, training=None):
-        '''
-        Numerically more stable implementation of
-        softmax function. Ref: http://cs231n.github.io/linear-classify/
-        input.shape = output.shape = (batch x input_dims)
-        `training` parameter is ignored to conform with interface
-        '''
-        # maximum value is now 0 along each training example, so exponentials wont break
-        input -= np.max(input, axis=1, keepdims=True)
-        exponentials = np.exp(input)
-        self.output = exponentials / np.sum(exponentials, axis=1, keepdims=True)
-        return self.output
-
-    def backward(self, backproped_grad):
-        deriv = self.output - np.square(self.output)
         return backproped_grad * deriv
 
     def update(self):
@@ -192,12 +183,12 @@ class Dropout:
 
 class BatchNorm:
     def __init__(self, input_dim, avg_decay=0.9, epsilon=1e-3, opt=config.OPT):
-        self.gamma = np.ones(input_dim[1])
-        self.beta = np.zeros(input_dim[1])
+        self.gamma = np.ones(input_dim[1], dtype='float64')
+        self.beta = np.zeros(input_dim[1], dtype='float64')
         self.d_gamma = None
         self.d_beta = None
-        self.running_avg_mean = np.zeros(input_dim[1])
-        self.running_avg_std = np.zeros(input_dim[1])
+        self.running_avg_mean = np.zeros(input_dim[1], dtype='float64')
+        self.running_avg_std = np.zeros(input_dim[1], dtype='float64')
         self.avg_decay =  avg_decay
         self.epsilon = epsilon
         self.input_hat = None
@@ -207,7 +198,6 @@ class BatchNorm:
 
         shape_list = [self.gamma.shape, self.beta.shape]
         self.optimizer.init_shape(shape_list)
-
 
     def forward(self, input, training):
         if training:
@@ -234,26 +224,36 @@ class BatchNorm:
 
 
 
-class CrossEntropyLoss:
+class SoftmaxCrossEntropy:
     def __init__(self):
-        self.y_pred = None   # Usually output from softmax layer
-        self.y_true = None  # A real valued loss for each training example
+        self.input = None
+        self.y_pred = None
+        self.y_true = None
 
-    def forward(self, y_pred, y_true):
-        ''' y_pred.shape = y_true.shape = (batch x num_classes), output.shape = (batch,) '''
-        self.y_pred = y_pred
+    def softmax(self, input, training=None):
+        ''' Compute the softmax loss given input '''
+        input -= np.max(input, axis=-1, keepdims=True)  # For numerical stability
+        exps = np.exp(input)
+        self.y_pred = exps / np.sum(exps, axis=-1, keepdims=True)
+        return self.y_pred
+
+    def cross_entropy(self, input, y_true):
+        ''' y_pred.shape = y_true.shape = (batch x num_classes), loss = real number '''
+        y_pred = self.softmax(input)
+        logs = -np.log(y_pred[range(len(y_pred)), np.argmax(y_true, axis=-1)])
+        loss = np.mean(logs)
         self.y_true = y_true
-        # -negative log probability of the right class for each example in the batch
-        # print('ypred:', y_pred)
-        # print('ypred shape:', y_pred.shape)
-        # print('ytrue:', y_true)
-        # print('ytrue shape:', y_true.shape)
-        right_class_probs = y_pred[np.arange(len(y_pred)), np.argmax(y_true, axis=1)]
-        return -np.log(right_class_probs + config.EPSILON)
+        self.y_pred = y_pred
+        return loss
 
     def backward(self):
-        return -self.y_true / (self.y_pred + config.EPSILON)
+        grad = self.y_pred
+        grad[range(len(grad)), np.argmax(self.y_true, axis=-1)] -= 1    # deriv = y_pred - y_true
+        grad /= len(grad)
+        return grad
 
+    def update(self):
+        pass    # Nothing to update
 
 
 if __name__ == '__main__':
