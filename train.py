@@ -1,25 +1,33 @@
 import h5py
 import numpy as np
 import utils
-from layers import FullyConnected, ReLU, LeakyReLU, BatchNorm, SoftmaxCrossEntropy
-import initializers
+from layers import FullyConnected, ReLU, LeakyReLU, BatchNorm, SoftmaxCrossEntropy, Dropout
+from initializers import xavier_uniform_init, random_uniform_init
 import config
 
 '''
 Model and its output activation and loss function
 '''
-output_gate = SoftmaxCrossEntropy()
-
 model = [
-    FullyConnected(config.INPUT_DIM, 64, initializers.xavier_uniform_init),
+    FullyConnected(config.INPUT_DIM, 256, xavier_uniform_init, use_weight_norm=True),
     LeakyReLU(),
-    # FullyConnected(32, 16, initializers.xavier_uniform_init),
-    # ReLU(),
-    FullyConnected(64, 32, initializers.xavier_uniform_init),
+    Dropout(0.5),
+    FullyConnected(256, 128, xavier_uniform_init, use_weight_norm=True),
     LeakyReLU(),
-    FullyConnected(32, config.NUM_CLASSES, initializers.xavier_uniform_init)
+    Dropout(0.1),
+    FullyConnected(128, 64, xavier_uniform_init, use_weight_norm=True),
+    LeakyReLU(),
+    Dropout(0.1),
+    FullyConnected(64, 32, xavier_uniform_init, use_weight_norm=True),
+    LeakyReLU(),
+    Dropout(0.1),
+    FullyConnected(32, 16, xavier_uniform_init, use_weight_norm=True),
+    LeakyReLU(),
+    Dropout(0.1),
+    FullyConnected(16, config.NUM_CLASSES, xavier_uniform_init, use_weight_norm=True)
 ]
 
+output_gate = SoftmaxCrossEntropy()
 
 
 def forward_pass(model, x_batch, training=True):

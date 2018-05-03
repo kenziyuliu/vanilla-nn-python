@@ -156,10 +156,10 @@ class LeakyReLU:
 
 
 class Dropout:
-    def __init__(self, rate):
-        if rate < 0 or rate >= 1:
+    def __init__(self, drop_rate):
+        if drop_rate < 0 or drop_rate >= 1:
             raise ValueError('Dropout: dropout rate must be >= 0 and < 1')
-        self.rate = rate
+        self.retain_rate = 1. - drop_rate
         self.mask = None
         self.input = None
 
@@ -168,13 +168,14 @@ class Dropout:
         if not training:
             return input    # During test time, no dropout required
 
-        self.mask = np.random.binomial(1, self.rate, input.shape) / self.rate   # divide rate so no change for prediction
+        self.mask = np.random.binomial(1, self.retain_rate, input.shape)
+        self.mask = self.mask / self.retain_rate   # divide rate so no change for prediction
         self.input = input
         return input * self.mask
 
     def backward(self, backproped_grad):
         ''' backproped_grad.shape = (batch x input_dims) '''
-        deriv = backproped_grad * self.mask / self.rate # divide rate so no change for prediction
+        return backproped_grad * self.mask / self.retain_rate # divide rate so no change for prediction
 
     def update(self):
         pass    # Nothing to update
