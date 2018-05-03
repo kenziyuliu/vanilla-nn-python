@@ -13,14 +13,14 @@ def get_optimizer(name):
 
 
 class SGD:
-    def __init__(self, learning_rate=0.001, momentum=0.9, nesterov=True):
+    def __init__(self, learning_rate, momentum=0.9, nesterov=True):
         self.learning_rate = learning_rate
         self.v = []
         self.momentum = momentum
         self.use_nesterov = nesterov
 
     def init_shape(self, shape_list):
-        self.v = [np.zeros(shape) for shape in shape_list]
+        self.v = [np.zeros(shape, dtype='float64') for shape in shape_list]
 
     def optimize(self, params_gradient):
         ''' Expects tupled parameters and their gradients e.g. [(w, dw), (b, db), ...] '''
@@ -28,15 +28,16 @@ class SGD:
         for i in range(len(params_gradient)):
             parameter, gradient = params_gradient[i]
             assert self.v[i].shape == parameter.shape == gradient.shape
-            if self.use_nesterov:
-                dervative = self.v[i]
-                self.v[i] = self.momentum * self.v[i] + self.learning_rate * gradient
-                dervative = self.momentum * dervative - (1.0 + self.momentum) * self.v[i]
-            else:
-                dervative = self.momentum * self.v[i] - self.learning_rate * gradient
-                self.v[i] = dervative
 
-            parameter += dervative
+            if self.use_nesterov:
+                change = self.v[i]
+                self.v[i] = self.momentum * self.v[i] + self.learning_rate * gradient
+                change = self.momentum * change - (1.0 + self.momentum) * self.v[i]
+            else:
+                change = self.momentum * self.v[i] - self.learning_rate * gradient
+                self.v[i] = change
+
+            parameter += change
 
 
 class Adam:
@@ -61,10 +62,12 @@ class Adam:
         for i in range(len(params_gradient)):
             parameter, gradient = params_gradient[i]
             assert parameter.shape == gradient.shape == self.mt[i].shape == self.vt[i].shape
-            self.mt[i] *= self.B1
-            self.mt[i] += (1 - self.B1) * gradient
-            self.vt[i] *= self.B2
-            self.vt[i] += (1 - self.B2) * (gradient * gradient)
-            mt_hat = self.mt[i] / (1 - self.B1 ** self.t)
-            vt_hat = self.vt[i] / (1 - self.B2 ** self.t)
-            parameter -= self.learning_rate * mt_hat / (np.sqrt(vt_hat) + self.epsilon)
+            # Adam update
+            self.mt[i] = self.mt[i] * self.B1 + (1. - self.B1) * gradient
+            self.vt[i] = self.vt[i] * self.B2 + (1. - self.B2) * (gradient * gradient)
+            mt_hat = self.mt[i] / (1. - (self.B1 ** self.t))
+            vt_hat = self.vt[i] / (1. - (self.B2 ** self.t))
+            change = (-self.learning_rate) * mt_hat / (np.sqrt(vt_hat) + self.epsilon)
+
+            parameter += change
+            
