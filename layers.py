@@ -156,10 +156,10 @@ class LeakyReLU:
 
 
 class Dropout:
-    def __init__(self, rate):
-        if rate < 0 or rate >= 1:
+    def __init__(self, drop_rate):
+        if drop_rate < 0 or drop_rate >= 1:
             raise ValueError('Dropout: dropout rate must be >= 0 and < 1')
-        self.rate = rate
+        self.retain_rate = 1. - drop_rate
         self.mask = None
         self.input = None
 
@@ -168,13 +168,14 @@ class Dropout:
         if not training:
             return input    # During test time, no dropout required
 
-        self.mask = np.random.binomial(1, self.rate, input.shape) / self.rate   # divide rate so no change for prediction
+        self.mask = np.random.binomial(1, self.retain_rate, input.shape)
+        self.mask = self.mask / self.retain_rate   # divide rate so no change for prediction
         self.input = input
         return input * self.mask
 
     def backward(self, backproped_grad):
         ''' backproped_grad.shape = (batch x input_dims) '''
-        deriv = backproped_grad * self.mask / self.rate # divide rate so no change for prediction
+        return backproped_grad * self.mask / self.retain_rate # divide rate so no change for prediction
 
     def update(self):
         pass    # Nothing to update
@@ -183,16 +184,15 @@ class Dropout:
 
 class BatchNorm:
     def __init__(self, input_dim, avg_decay=0.9, epsilon=1e-3, opt=config.OPT):
-        self.gamma = np.ones(input_dim[1], dtype='float64')
-        self.beta = np.zeros(input_dim[1], dtype='float64')
+        self.gamma = np.ones(input_dim, dtype='float64')
+        self.beta = np.zeros(input_dim, dtype='float64')
         self.d_gamma = None
         self.d_beta = None
-        self.running_avg_mean = np.zeros(input_dim[1], dtype='float64')
-        self.running_avg_std = np.zeros(input_dim[1], dtype='float64')
+        self.running_avg_mean = np.zeros(input_dim, dtype='float64')
+        self.running_avg_std = np.zeros(input_dim, dtype='float64')
         self.avg_decay =  avg_decay
         self.epsilon = epsilon
         self.input_hat = None
-        self.input_dim = input_dim
         self.std = None
         self.optimizer = get_optimizer(opt)
 
@@ -213,7 +213,9 @@ class BatchNorm:
 
     def backward(self, backproped_grad):
         d_xhat = backproped_grad * self.gamma
-        dx = (1. / self.input_dim[0]) * (self.input_dim[0] * d_xhat - np.sum(d_xhat, axis=0)) / self.std - self.input_hat * np.sum(d_xhat * self.input_hat, axis=0)
+        numerator = len(self.input_hat) * d_xhat - np.sum(d_xhat, axis=0)
+        numerator -= self.input_hat * np.sum(d_xhat * self.input_hat, axis=0)
+        dx = (1. / len(self.input_hat)) * numerator / self.std
         self.d_gamma = np.sum(backproped_grad * self.input_hat, axis=0)
         self.d_beta = np.sum(backproped_grad, axis=0)
         return dx
@@ -296,3 +298,11 @@ if __name__ == '__main__':
     x = np.arange(30).reshape(5, 6)
     print(x)
     print(Dropout(0.5).forward(x))
+
+
+
+
+
+
+
+
