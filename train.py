@@ -1,11 +1,14 @@
 import numpy as np
 import h5py
+import time
+import datetime
 import utils
 import config
 from layers import FullyConnected, ReLU, LeakyReLU, BatchNorm, SoftmaxCrossEntropy, Dropout
 from initializers import xavier_uniform_init, random_uniform_init
-from models import good_model
 from models import softmax_crossentropy as sce_gate
+from models import he_and_relu, xavier_and_lrelu
+
 
 '''
 Helper methods
@@ -29,6 +32,7 @@ def load_test_data(filepath):
     return X
 
 
+
 def forward_pass(model, x_batch, training):
     ''' Given model, forward pass the batch '''
     for layer in model:
@@ -46,6 +50,7 @@ def update_model(model):
     ''' Update each layer in model by calling their own optimizers '''
     for layer in model:
         layer.update()
+
 
 
 def go_through_by_batch(model, X, y, training):
@@ -80,17 +85,23 @@ def go_through_by_batch(model, X, y, training):
     return avg_loss, avg_acc
 
 
+
 def model_train(model, X_train, y_train, X_val, y_val):
-    print('\nTraining on {} examples, validating on {} examples\n'.format(len(X_train), len(X_val)))
+    print('\nAt {}, Training on {} examples, validating on {} examples\n'
+        .format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), len(X_train), len(X_val)))
 
     # Training and validate on the number of epochs
-    for e in range(config.NUM_EPOCHS):
+    for e in range(1, config.NUM_EPOCHS + 1):
+        start_time = time.time()
         train_loss, train_acc = go_through_by_batch(model, X_train, y_train, training=True)
         val_loss, val_acc = go_through_by_batch(model, X_val, y_val, training=False)
+        end_time = time.time()
 
-        print("Epoch {:>3} | ".format(e) +
-              "Train Loss: {:.5f}, Train Accuracy: {:.5f} | ".format(train_loss, train_acc) +
-              "Val Loss: {:.5f}, Val Accuracy: {:.5f}".format(val_loss, val_acc))
+        print("Epoch {:>3}/{} | ".format(e, config.NUM_EPOCHS) +
+              "Train Loss: {:.4f}, Train Acc: {:.4f} | ".format(train_loss, train_acc) +
+              "Val Loss: {:.4f}, Val Acc: {:.4f} | ".format(val_loss, val_acc) +
+              "Time spent: {:.2f} sec".format(end_time - start_time))
+
 
 
 def model_evaluate(model, X_test, y_test):
@@ -99,6 +110,7 @@ def model_evaluate(model, X_test, y_test):
     test_loss, test_acc = go_through_by_batch(model, X_test, y_test, training=False)
 
     print('\nTest Loss: {:.5f} | Test Accuracy: {:.5f}\n'.format(test_loss, test_acc))
+
 
 
 def model_predict(model, X):
@@ -120,40 +132,52 @@ def model_predict(model, X):
     return y_pred
 
 
+
 def main():
-    X, y = load_training_data(config.DATA_PATH)
-    y = utils.label_to_onehot_vector(y, config.NUM_CLASSES)
+    # List of models to compare; keep 1 model only when submitting
+    models_to_test = [he_and_relu]
+    model_names = ['he_and_relu']
 
-    # Shuffle data each time before training
-    utils.shuffle_together(X, y)
+    for model, model_name in zip(models_to_test, model_names):
+        print('\nTraining model: {}'.format(model_name))
 
-    data_split = { 'train': 57000, 'val': 1500, 'test': 1500 } # Data split of train/val/test
-    split = (data_split['train'],
-             data_split['train'] + data_split['val'],
-             data_split['train'] + data_split['val'] + data_split['test'])
+        X, y = load_training_data(config.DATA_PATH)
+        y = utils.label_to_onehot_vector(y, config.NUM_CLASSES)
 
-    y_train, y_val, y_test = y[:split[0]], y[split[0]:split[1]], y[split[1]:split[2]]
-    X_train, X_val, X_test = X[:split[0]], X[split[0]:split[1]], X[split[1]:split[2]]
+        # Shuffle data each time before training
+        utils.shuffle_together(X, y)
 
-    # Preprocess: normalise after split
-    X_train = utils.standardise(X_train)
-    X_val = utils.standardise(X_val)
-    X_test = utils.standardise(X_test)
+        split = (config.DATA_SPLIT['train'],
+                 config.DATA_SPLIT['train'] + config.DATA_SPLIT['val'],
+                 config.DATA_SPLIT['train'] + config.DATA_SPLIT['val'] + config.DATA_SPLIT['test'])
 
-    # Train and Test
-    model_train(good_model, X_train, y_train, X_val, y_val)
-    model_evaluate(good_model, X_test, y_test)
 
-    # Load testing data for marking accuracy and make predictions
-    X_test = load_test_data(config.DATA_PATH)
-    y_test_pred = model_predict(good_model, X_test)
+        assert len(X) == split[2]    # Make sure the split sums up to number of examples
 
-    # Save prediction to file
-    with h5py.File('{}/Predicted_labels.h5'.format(config.DATA_PATH),'w') as H:
-        H.create_dataset('label', data=y_test_pred)
+        y_train, y_val, y_test = y[:split[0]], y[split[0]:split[1]], y[split[1]:split[2]]
+        X_train, X_val, X_test = X[:split[0]], X[split[0]:split[1]], X[split[1]:split[2]]
 
-    print('Predictions for {} testing data saved to {}/Predicted_labels.h5 with dataset name "label"\n'
-            .format(len(X_test), config.DATA_PATH))
+        # Preprocess: normalise after split
+        X_train = utils.standardise(X_train)
+        X_val = utils.standardise(X_val)
+        X_test = utils.standardise(X_test)
+
+        # Train and Test
+        model_train(model, X_train, y_train, X_val, y_val)
+        model_evaluate(model, X_test, y_test)
+
+        if config.PREDICTING:
+            # Load testing data for marking accuracy and make predictions
+            X_test = load_test_data(config.DATA_PATH)
+            y_test_pred = model_predict(best_model, X_test)
+
+            # Save prediction to file
+            with h5py.File('{}/Predicted_labels.h5'.format(config.DATA_PATH),'w') as H:
+                H.create_dataset('label', data=y_test_pred)
+
+            print('Predictions for {} testing data saved to {}/Predicted_labels.h5 with dataset name "label"\n'
+                .format(len(X_test), config.DATA_PATH))
+
 
 
 if __name__ == '__main__':

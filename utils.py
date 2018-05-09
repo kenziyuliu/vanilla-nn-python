@@ -62,10 +62,8 @@ if __name__ == '__main__':
     reverted_labels = onehot_vector_to_label(predictions)
     print(predictions)
     print(reverted_labels)
-    # print(np.array_equal(labels, reverted_labels))
 
     print('mean norm:')
-    # data = np.arange(9).reshape(3, 3)
     data = np.random.randint(0,10, (3,3))
     print(data)
     print(mean_normalise(data))
