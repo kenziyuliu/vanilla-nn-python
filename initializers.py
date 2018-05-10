@@ -17,7 +17,7 @@ def he_uniform_init(shape, a=0):
 
 def he_normal_init(shape, a=0):
     input_dim = shape[0]
-    return np.random.normal(0, np.sqrt(2. / (1. + np.square(a)) * input_dim), size=shape).astype('float64')
+    return np.random.normal(0, np.sqrt(2. / ((1. + np.square(a)) * input_dim)), size=shape).astype('float64')
 
 
 def random_uniform_init(shape, low=-0.5, high=0.5):

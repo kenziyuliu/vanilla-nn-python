@@ -1,6 +1,7 @@
 import config
 import numpy as np
 
+
 # Little factory method for making optimizers
 def get_optimizer(name):
     name = name.lower()
@@ -12,8 +13,9 @@ def get_optimizer(name):
         raise ValueError('Unsupported Optimizer: "{}"'.format(name))
 
 
+
 class SGD:
-    def __init__(self, learning_rate, momentum=0.9, nesterov=True):
+    def __init__(self, learning_rate, momentum=0.9, nesterov=config.NESTEROV):
         self.learning_rate = learning_rate
         self.v = []                     # Past velocities
         self.momentum = momentum        # Momentum of SGD, can be set to 0
@@ -23,7 +25,7 @@ class SGD:
         ''' Initialise velocities using the given parameter shapes of a layer '''
         self.v = [np.zeros(shape, dtype='float64') for shape in parameter_shapes]
 
-    def optimize(self, params_gradient):
+    def optimize(self, params_gradient, weight_decay_rate):
         '''
         Trains the given parameters using the given gradients
         Expects tupled parameters and their gradients e.g. [(w, dw), (b, db), ...]
@@ -41,7 +43,11 @@ class SGD:
                 change = self.momentum * self.v[i] - self.learning_rate * gradient
                 self.v[i] = change
 
-            parameter += change     # Update parameters using calculated change
+            # Weight decay: simpler implementation compared to having decay term in the loss
+            change += (-weight_decay_rate * parameter)
+            # Update parameters using calculated change
+            parameter += change
+
 
 
 class Adam:
@@ -60,7 +66,7 @@ class Adam:
             self.mt.append(np.zeros(shape))
             self.vt.append(np.zeros(shape))
 
-    def optimize(self, params_gradient):
+    def optimize(self, params_gradient, weight_decay_rate):
         '''
         Trains the given parameters using the given gradients
         Expects tupled parameters and their gradients e.g. [(w, dw), (b, db), ...]
@@ -70,6 +76,7 @@ class Adam:
         for i in range(len(params_gradient)):
             parameter, gradient = params_gradient[i]
             assert parameter.shape == gradient.shape == self.mt[i].shape == self.vt[i].shape
+
             # Adam update
             self.mt[i] = self.mt[i] * self.B1 + (1. - self.B1) * gradient
             self.vt[i] = self.vt[i] * self.B2 + (1. - self.B2) * (gradient * gradient)
@@ -77,5 +84,8 @@ class Adam:
             vt_hat = self.vt[i] / (1. - (self.B2 ** self.t))
             change = (-self.learning_rate) * mt_hat / (np.sqrt(vt_hat) + self.epsilon)
 
-            parameter += change     # Update parameters using calculated change
+            # Weight decay: simpler implementation compared to having decay term in the loss
+            change += (-weight_decay_rate * parameter)
+            # Update parameters using calculated change
+            parameter += change
 

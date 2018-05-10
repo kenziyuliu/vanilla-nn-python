@@ -2,7 +2,7 @@ import numpy as np
 import config
 from optimizers import get_optimizer
 import copy
-
+from scipy.special import expit as sigmoid        # Sigmoid function
 
 """
 NOTE:
@@ -14,6 +14,7 @@ class FullyConnected:
                  input_dim,
                  output_dim,
                  weight_initializer,
+                 weight_decay=0.,
                  use_bias=False,
                  use_weight_norm=False,
                  opt=config.OPT,
@@ -23,6 +24,10 @@ class FullyConnected:
         self.use_weight_norm = use_weight_norm
         self.clip_gradients = clip_gradients    # Option for clipping gradients
 
+        if weight_decay < 0:
+            raise ValueError('FullyConnected: negative weight_decay not allowed')
+
+        self.weight_decay = weight_decay
         self.optimizer = get_optimizer(opt)
         param_shapes = []                       # For initializing the optimizer
 
@@ -49,6 +54,11 @@ class FullyConnected:
             param_shapes.append(self.b.shape)
         # Init optimizer using shape of used parameters; e.g. gradient velocities
         self.optimizer.init_shape(param_shapes)
+
+
+    def clip_grad(self, gradient, mingrad=-1., maxgrad=1.):
+        ''' Clip gradients in a range to prevent explosion '''
+        return np.maximum(mingrad, np.minimum(maxgrad, gradient))
 
 
     def get_weight(self):
@@ -111,12 +121,7 @@ class FullyConnected:
             params_gradient.append((self.b, self.db))
 
         # Let the optimizer to do optimization
-        self.optimizer.optimize(params_gradient)
-
-
-    def clip_grad(self, gradient, mingrad=-1., maxgrad=1.):
-        ''' Clip gradients in a range to prevent explosion '''
-        return np.maximum(mingrad, np.minimum(maxgrad, gradient))
+        self.optimizer.optimize(params_gradient, self.weight_decay)
 
 
 
@@ -139,7 +144,7 @@ class ReLU:
 
 
 class LeakyReLU:
-    def __init__(self, alpha=0.1):
+    def __init__(self, alpha=0.01):
         if alpha <= 0 or alpha > 1:
             raise ValueError('LeakyReLU: alpha must be between 0 and 1')
         self.alpha = alpha
@@ -154,6 +159,44 @@ class LeakyReLU:
         ''' Compute gradient of LeakyReLU and backprop '''
         deriv = np.where(self.input < 0, self.alpha, 1)
         return backproped_grad * deriv
+
+    def update(self):
+        pass    # Nothing to update
+
+
+
+class Sigmoid:
+    def __init__(self):
+        self.output = None
+
+    def forward(self, input, training=None):
+        ''' Compute the sigmoid function; training status is ignored '''
+        self.output = sigmoid(input)    # Sigmoid from SciPy
+        return self.output
+
+    def backward(self, backproped_grad):
+        ''' Compute the gradient w.r.t. input '''
+        deriv = self.output * (1. - self.output)
+        return deriv * backproped_grad
+
+    def update(self):
+        pass    # Nothing to update
+
+
+
+class Tanh:
+    def __init__(self):
+        self.output = None
+
+    def forward(self, input, training=None):
+        ''' Compute the tanh function; training status is ignored '''
+        self.output = np.tanh(input)
+        return self.output
+
+    def backward(self, backproped_grad):
+        '''  Compute gradient w.r.t. input '''
+        deriv = 1. - np.square(self.output)
+        return deriv * backproped_grad
 
     def update(self):
         pass    # Nothing to update
@@ -188,7 +231,7 @@ class Dropout:
 
 
 class BatchNorm:
-    def __init__(self, input_dim, avg_decay=0.9, epsilon=1e-3, opt=config.OPT):
+    def __init__(self, input_dim, avg_decay=0.99, epsilon=1e-3, weight_decay=0., opt=config.OPT):
         self.gamma = np.ones(input_dim, dtype='float64')
         self.beta = np.zeros(input_dim, dtype='float64')
         self.d_gamma = None
@@ -201,39 +244,49 @@ class BatchNorm:
         self.std = None
         self.optimizer = get_optimizer(opt)
 
-        shape_list = [self.gamma.shape, self.beta.shape]
-        self.optimizer.init_shape(shape_list)
+        if weight_decay < 0:
+            raise ValueError('FullyConnected: negative weight_decay not allowed')
+
+        self.weight_decay = weight_decay
+        param_shapes = [self.gamma.shape, self.beta.shape]
+        self.optimizer.init_shape(param_shapes)
 
     def forward(self, input, training):
+        ''' Compute forward pass of BatchNorm depending on whether we are training '''
         if training:
+            # normalise input: 0 mean and unit std
             self.std = np.sqrt(np.var(input, axis=0) + self.epsilon)
             mean = np.mean(input, axis=0)
             self.input_hat = (input - mean) / self.std
+            # Compute Exponentially Weighted Averages
             self.running_avg_mean = self.avg_decay * self.running_avg_mean + (1 - self.avg_decay) * mean
             self.running_avg_std = self.avg_decay * self.running_avg_std + (1 - self.avg_decay) * self.std
             return self.gamma * self.input_hat + self.beta
         else:
+            # Use running average and std to normalise
             input_hat = (input - self.running_avg_mean) / self.running_avg_std
             return self.gamma * input_hat + self.beta
 
     def backward(self, backproped_grad):
+        ''' Backprop of BatchNorm, computes gradients of dx (input), d_gamma, d_beta '''
+        # Compute derivative w.r.t. input
         d_xhat = backproped_grad * self.gamma
         numerator = len(self.input_hat) * d_xhat - np.sum(d_xhat, axis=0)
         numerator -= self.input_hat * np.sum(d_xhat * self.input_hat, axis=0)
         dx = (1. / len(self.input_hat)) * numerator / self.std
+        # Compute derivative w.r.t. gamma and beta
         self.d_gamma = np.sum(backproped_grad * self.input_hat, axis=0)
         self.d_beta = np.sum(backproped_grad, axis=0)
         return dx
 
     def update(self):
         params_gradient = [(self.gamma, self.d_gamma), (self.beta, self.d_beta)]
-        self.optimizer.optimize(params_gradient)
+        self.optimizer.optimize(params_gradient, self.weight_decay)
 
 
 
 class SoftmaxCrossEntropy:
     def __init__(self):
-        self.input = None
         self.y_pred = None
         self.y_true = None
 
@@ -264,11 +317,11 @@ class SoftmaxCrossEntropy:
         grad = self.y_pred
         # gradient = y_pred - y_true, and y_true == 1 only for the right classes
         grad[range(len(grad)), np.argmax(self.y_true, axis=-1)] -= 1
-        grad /= len(grad)
         return grad
 
     def update(self):
         pass    # Nothing to update
+
 
 
 if __name__ == '__main__':
