@@ -11,24 +11,26 @@ Currently the output gate assumes Softmax + CrossEntropy
 
 softmax_crossentropy = SoftmaxCrossEntropy()
 
-he_and_relu = [     # CURRENTLY THE BEST MODEL
-    FullyConnected(config.INPUT_DIM, 192, he_uniform_init, use_weight_norm=True, weight_decay=3e-7),
+# CURRENTLY THE BEST MODEL
+he_and_relu = [
+    FullyConnected(config.INPUT_DIM, 192, he_uniform_init, use_weight_norm=True),
     BatchNorm(input_dim=192),
     ReLU(),
-    Dropout(0.4),
+    Dropout(0.3),
 
-    FullyConnected(192, 96, he_uniform_init, use_weight_norm=True, weight_decay=3e-7),
+    FullyConnected(192, 96, he_uniform_init, use_weight_norm=True),
     BatchNorm(input_dim=96),
     ReLU(),
-    Dropout(0.4),
+    Dropout(0.3),
 
-    FullyConnected(96, 48, he_uniform_init, use_weight_norm=True, weight_decay=3e-7),
+    FullyConnected(96, 48, he_uniform_init, use_weight_norm=True),
     BatchNorm(input_dim=48),
     ReLU(),
     Dropout(0.3),
 
     FullyConnected(48, config.NUM_CLASSES, he_uniform_init, use_weight_norm=True),
 ]
+
 
 xavier_and_lrelu = [
     FullyConnected(config.INPUT_DIM, 192, xavier_uniform_init, use_weight_norm=True, weight_decay=1e-6),

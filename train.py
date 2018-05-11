@@ -54,6 +54,10 @@ def update_model(model):
 
 
 def go_through_by_batch(model, X, y, training):
+    # If no examples, return invalid loss and accuracy
+    if len(X) == 0:
+        return float('inf'), float('inf')
+
     assert len(X) == len(y)     # Sanity check
     total_loss = total_acc = 0
     num_batches = len(X) // config.BATCH_SIZE
@@ -92,9 +96,15 @@ def model_train(model, X_train, y_train, X_val, y_val):
 
     # Training and validate on the number of epochs
     for e in range(1, config.NUM_EPOCHS + 1):
+        # Record epoch time
         start_time = time.time()
+
+        # Shuffle before training
+        utils.shuffle_together(X_train, y_train)
+
         train_loss, train_acc = go_through_by_batch(model, X_train, y_train, training=True)
         val_loss, val_acc = go_through_by_batch(model, X_val, y_val, training=False)
+
         end_time = time.time()
 
         print("Epoch {:>3}/{} | ".format(e, config.NUM_EPOCHS) +
@@ -159,24 +169,30 @@ def main():
 
         # Preprocess: normalise after split
         X_train = utils.standardise(X_train)
-        X_val = utils.standardise(X_val)
-        X_test = utils.standardise(X_test)
+        if len(X_val) > 0:
+            X_val = utils.standardise(X_val)
+        if len(X_test) > 0:
+            X_test = utils.standardise(X_test)
 
         # Train and Test
         model_train(model, X_train, y_train, X_val, y_val)
-        model_evaluate(model, X_test, y_test)
+
+        if len(X_test) > 0:
+            model_evaluate(model, X_test, y_test)
+
 
         if config.PREDICTING:
-            # Load testing data for marking accuracy and make predictions
+            ''' Load testing data for marking '''
             X_test = load_test_data(config.DATA_PATH)
-            y_test_pred = model_predict(best_model, X_test)
+            y_test_pred = model_predict(model, X_test)
+            y_test_pred = np.around(y_test_pred).astype('int64')    # Save data as int
 
             # Save prediction to file
-            with h5py.File('{}/Predicted_labels.h5'.format(config.DATA_PATH),'w') as H:
+            with h5py.File('{}/Predicted_labels.h5'.format(config.SAVE_PATH),'w') as H:
                 H.create_dataset('label', data=y_test_pred)
 
-            print('Predictions for {} testing data saved to {}/Predicted_labels.h5 with dataset name "label"\n'
-                .format(len(X_test), config.DATA_PATH))
+            print('Predictions for {} testing data saved to "{}/Predicted_labels.h5" with dataset name "label"\n'
+                .format(len(X_test), config.SAVE_PATH))
 
 
 

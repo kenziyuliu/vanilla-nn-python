@@ -3,8 +3,12 @@ This file stores constants and configurations
 '''
 
 ''' Misc '''
-DATA_PATH = '../data'       # For loading data
-PREDICTING = False          # Set to true if saving predictions for `test_128.h5` to DATA_PATH
+# Path for training data
+DATA_PATH = '../data'
+# Path for saving predictions
+SAVE_PATH = '../data'
+# Set to true if saving predictions for `test_128.h5` to DATA_PATH
+PREDICTING = True
 
 ''' Constants '''
 INPUT_DIM = 128
@@ -13,11 +17,11 @@ EPSILON = 1e-12
 
 ''' Training '''
 LEARNING_RATE = 0.0005
-NUM_EPOCHS = 65
+NUM_EPOCHS = 55
 BATCH_SIZE = 32
 OPT = 'adam'
 # Data split of train/val/test, should sum to the number of examples in the training set
-DATA_SPLIT = { 'train': 58000, 'val': 1000, 'test': 1000 }
+DATA_SPLIT = { 'train': 59000, 'val': 1000, 'test': 0 }
 
 
 ''' SGD '''     # Only if OPT == 'sgd'

@@ -39,7 +39,7 @@ def standardise(data):
         raise ValueError('Missing dimension! (n, dim) required')
     mean = np.mean(data, axis=0)
     stddev = np.std(data, axis=0)
-    data = (data - mean) / stddev
+    data = (data - mean) / np.maximum(stddev, 1e-15)
     return data
 
 
