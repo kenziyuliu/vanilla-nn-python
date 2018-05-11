@@ -21,10 +21,11 @@ NUM_EPOCHS = 55
 BATCH_SIZE = 32
 OPT = 'adam'
 # Data split of train/val/test, should sum to the number of examples in the training set
-DATA_SPLIT = { 'train': 59000, 'val': 1000, 'test': 0 }
+DATA_SPLIT = { 'train': 60000, 'val': 0, 'test': 0 }
 
 
-''' SGD '''     # Only if OPT == 'sgd'
+''' SGD '''
+# Only valid if OPT == 'sgd'
 NESTEROV = True
 
 

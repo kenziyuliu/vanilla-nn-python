@@ -33,12 +33,12 @@ he_and_relu = [
 
 
 xavier_and_lrelu = [
-    FullyConnected(config.INPUT_DIM, 192, xavier_uniform_init, use_weight_norm=True, weight_decay=1e-6),
+    FullyConnected(config.INPUT_DIM, 192, xavier_uniform_init, use_weight_norm=True, weight_decay=1e-7),
     BatchNorm(input_dim=192),
     LeakyReLU(),
     Dropout(0.4),
 
-    FullyConnected(192, 96, xavier_uniform_init, use_weight_norm=True, weight_decay=1e-6),
+    FullyConnected(192, 96, xavier_uniform_init, use_weight_norm=True, weight_decay=1e-7),
     BatchNorm(input_dim=96),
     LeakyReLU(),
     Dropout(0.4),

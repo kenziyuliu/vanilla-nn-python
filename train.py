@@ -54,6 +54,7 @@ def update_model(model):
 
 
 def go_through_by_batch(model, X, y, training):
+    ''' Given training examples, pass them forward/backward through the network in batches '''
     # If no examples, return invalid loss and accuracy
     if len(X) == 0:
         return float('inf'), float('inf')
@@ -91,6 +92,7 @@ def go_through_by_batch(model, X, y, training):
 
 
 def model_train(model, X_train, y_train, X_val, y_val):
+    ''' Train and validate the model on the given examples '''
     print('\nAt {}, Training on {} examples, validating on {} examples\n'
         .format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), len(X_train), len(X_val)))
 
@@ -107,14 +109,17 @@ def model_train(model, X_train, y_train, X_val, y_val):
 
         end_time = time.time()
 
-        print("Epoch {:>3}/{} | ".format(e, config.NUM_EPOCHS) +
-              "Train Loss: {:.4f}, Train Acc: {:.4f} | ".format(train_loss, train_acc) +
-              "Val Loss: {:.4f}, Val Acc: {:.4f} | ".format(val_loss, val_acc) +
-              "Time spent: {:.2f} sec".format(end_time - start_time))
+        print("Epoch {:>3}/{} | ".format(e, config.NUM_EPOCHS), end='')
+        print("Train Loss: {:.4f}, Train Acc: {:.4f} | ".format(train_loss, train_acc), end='')
+        if len(X_val) > 0:
+            print("Val Loss: {:.4f}, Val Acc: {:.4f} | ".format(val_loss, val_acc), end='')
+        print("Time spent: {:.2f} sec".format(end_time - start_time))
 
 
 
 def model_evaluate(model, X_test, y_test):
+    ''' Evaluate the model on unseen examples '''
+
     print('\nEvaluating model on {} unseen examples from training set...'.format(len(X_test)))
     # Evaluate model using part of unseen data from the training set
     test_loss, test_acc = go_through_by_batch(model, X_test, y_test, training=False)
@@ -124,6 +129,7 @@ def model_evaluate(model, X_test, y_test):
 
 
 def model_predict(model, X):
+    ''' Use the model to make predictions given the input data '''
     print('\nMaking predictions on {} testing data...'.format(len(X)))
 
     y_pred = np.zeros(len(X))   # Space for storing predictions

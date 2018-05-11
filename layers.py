@@ -251,6 +251,7 @@ class BatchNorm:
         param_shapes = [self.gamma.shape, self.beta.shape]
         self.optimizer.init_shape(param_shapes)
 
+
     def forward(self, input, training):
         ''' Compute forward pass of BatchNorm depending on whether we are training '''
         if training:
@@ -266,6 +267,7 @@ class BatchNorm:
             # Use running average and std to normalise
             input_hat = (input - self.running_avg_mean) / self.running_avg_std
             return self.gamma * input_hat + self.beta
+
 
     def backward(self, backproped_grad):
         ''' Backprop of BatchNorm, computes gradients of dx (input), d_gamma, d_beta '''
