@@ -1,5 +1,6 @@
 # Pure Python/Numpy Implementations of Simple NN Modules
-    - Most of the useful implementations is in `layers.py`, `optimizers.py`, and `initializers.py`.
+- Most of the useful implementations is in `layers.py`, `optimizers.py`, and `initializers.py`.
+
 
 # (5329 only) Instruction for Training the Model, and saving the predictions
 
