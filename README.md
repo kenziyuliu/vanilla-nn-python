@@ -1,4 +1,7 @@
-# Instruction for Training the Model, and saving the predictions
+# Pure Python/Numpy Implementations of Simple NN Modules
+    - Most of the useful implementations is in `layers.py`, `optimizers.py`, and `initializers.py`.
+
+# (5329 only) Instruction for Training the Model, and saving the predictions
 
 1. First, goto `config.py` in the `Algorithm` folder,
     - change the `DATA_PATH` variable to the path that contains the training data and testing inputs (i.e. `train_128.h5`, `train_label.h5`, `test_128.h5`)
